@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.Python
+
+# 가상환경
+venv/
+env/
+
+# 앱 생성 파일 (중요: 이 파일들은 배포 후 다시 설정해야 함)
+config/
+templates/
+
+# OS 파일
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
