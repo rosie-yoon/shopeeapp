@@ -16,34 +16,39 @@ import pandas as pd
 from pathlib import Path
 from sheet_reader import parse_category
 from template_analyzer import _fix_xlsx_bytes
+from gdrive_manager import get_gdrive_manager
 
+# ════════════════════════════════════════════════════════════
+# 로컬 fallback용 템플릿 폴더 경로 (ImportError 해결)
+# ════════════════════════════════════════════════════════════
 TEMPLATES_DIR = Path(__file__).parent / "templates"
+TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)  # 폴더 자동 생성
 
 # 구글 시트 컬럼명 → 템플릿 internal key 매핑
 GSHEET_COL_TO_INTERNAL = {
-    "Category":                  "ps_tmpl_mt_upload_title_category",
-    "Product Name":              "ps_tmpl_mt_upload_title_product_name",
-    "Product Description":       "ps_tmpl_mt_upload_title_product_description",
-    "Parent SKU":                "ps_tmpl_mt_upload_title_parent_sku",
+    "Category": "ps_tmpl_mt_upload_title_category",
+    "Product Name": "ps_tmpl_mt_upload_title_product_name",
+    "Product Description": "ps_tmpl_mt_upload_title_product_description",
+    "Parent SKU": "ps_tmpl_mt_upload_title_parent_sku",
     "Variation Integration No.": "ps_tmpl_mt_upload_title_variation_integration_no",
-    "Variation Name1":           "ps_tmpl_mt_upload_title_variation_1_name",
-    "Option for Variation 1":    "ps_tmpl_mt_upload_title_variation_1_option",
-    "Image per Variation":       "ps_tmpl_mt_upload_title_variation_1_image",
-    "Global SKU Price":          "ps_tmpl_mt_upload_title_price",
-    "Stock":                     "ps_tmpl_mt_upload_title_stock",
-    "SKU":                       "ps_tmpl_mt_upload_title_sku",
-    "Cover image":               "ps_tmpl_mt_upload_title_cover_image",
-    "Item Image 1":              "ps_item_image_1",
-    "Item Image 2":              "ps_item_image_2",
-    "Item Image 3":              "ps_item_image_3",
-    "Item Image 4":              "ps_item_image_4",
-    "Item Image 5":              "ps_item_image_5",
-    "Item Image 6":              "ps_item_image_6",
-    "Item Image 7":              "ps_item_image_7",
-    "Item Image 8":              "ps_item_image_8",
-    "Weight":                    "ps_tmpl_mt_upload_title_weight",
-    "Days to ship":              "ps_tmpl_mt_upload_title_dts",
-    "Brand":                     "ps_tmpl_mt_upload_title_brand",
+    "Variation Name1": "ps_tmpl_mt_upload_title_variation_1_name",
+    "Option for Variation 1": "ps_tmpl_mt_upload_title_variation_1_option",
+    "Image per Variation": "ps_tmpl_mt_upload_title_variation_1_image",
+    "Global SKU Price": "ps_tmpl_mt_upload_title_price",
+    "Stock": "ps_tmpl_mt_upload_title_stock",
+    "SKU": "ps_tmpl_mt_upload_title_sku",
+    "Cover image": "ps_tmpl_mt_upload_title_cover_image",
+    "Item Image 1": "ps_item_image_1",
+    "Item Image 2": "ps_item_image_2",
+    "Item Image 3": "ps_item_image_3",
+    "Item Image 4": "ps_item_image_4",
+    "Item Image 5": "ps_item_image_5",
+    "Item Image 6": "ps_item_image_6",
+    "Item Image 7": "ps_item_image_7",
+    "Item Image 8": "ps_item_image_8",
+    "Weight": "ps_tmpl_mt_upload_title_weight",
+    "Days to ship": "ps_tmpl_mt_upload_title_dts",
+    "Brand": "ps_tmpl_mt_upload_title_brand",
 }
 
 # 숫자로 저장해야 하는 internal key 목록
@@ -122,19 +127,6 @@ def _build_shared_strings_xml(strings: list) -> str:
     return "".join(parts)
 
 
-def _get_key_to_col(sheet2_xml: str) -> dict:
-    """sheet2.xml row1에서 { internal_key: col_letter } 매핑"""
-    rows1 = re.findall(r'<row[^>]*\br="1"[^>]*>.*?</row>', sheet2_xml, re.DOTALL)
-    if not rows1:
-        return {}
-    mapping = {}
-    for m in re.finditer(r'<c\s+r="([A-Z]+)1"[^>]*>\s*(?:<v>(\d+)</v>|<is><t[^>]*>([^<]*)</t></is>)', rows1[0]):
-        col_letter = m.group(1)
-        # sharedString 인덱스 or inlineStr
-        mapping[col_letter] = m.group(2) or m.group(3)  # 임시: 인덱스 문자열 저장
-    return mapping
-
-
 def _strip_key_suffix(raw_key: str) -> str:
     """키 값에 붙은 |숫자|숫자 suffix 제거. 예: 'ps_tmpl_mt_upload_title_category|1|0' → 'ps_tmpl_mt_upload_title_category'"""
     return raw_key.split('|')[0] if '|' in raw_key else raw_key
@@ -155,9 +147,9 @@ def _get_key_to_col_from_shared(sheet2_xml: str, shared: list) -> dict:
         if idx < len(shared):
             raw_key = shared[idx]
             base_key = _strip_key_suffix(raw_key)
-            mapping[base_key] = col_letter          # suffix 없는 키로 저장
+            mapping[base_key] = col_letter  # suffix 없는 키로 저장
             if raw_key != base_key:
-                mapping[raw_key] = col_letter       # suffix 있는 원본도 저장
+                mapping[raw_key] = col_letter  # suffix 있는 원본도 저장
     # inlineStr: <c r="A1" ... t="inlineStr"><is><t>...</t></is></c>
     for m in re.finditer(r'<c\s+r="([A-Z]+)1"[^>]*t="inlineStr"[^>]*>\s*<is><t[^>]*>([^<]+)</t></is>', rows1[0]):
         col_letter = m.group(1)
@@ -194,7 +186,7 @@ def _get_status_map_from_hidden(hidden_xml: str, shared: list, cat_id: str) -> d
         # 해당 행 모든 셀 상태 수집
         status_by_col = {}
         for cm in re.finditer(
-            r'<c\s+r="([A-Z]+)\d+"[^>]*(?:t="s")?[^>]*>\s*(?:<v>(\d+)</v>)?', row_content
+                r'<c\s+r="([A-Z]+)\d+"[^>]*(?:t="s")?[^>]*>\s*(?:<v>(\d+)</v>)?', row_content
         ):
             col_letter = cm.group(1)
             v = cm.group(2)
@@ -279,23 +271,43 @@ def get_template_status_map(ws_hidden, key_to_col: dict, cat_id: str, cat_path: 
 
 
 def build_file(
-    template_path: str,
-    group_df: pd.DataFrame,
-    cat_id: str,
-    auto_rules: dict,
-    global_rules: dict,
+        template_src,  # str(파일명) 또는 bytes 지원
+        group_df: pd.DataFrame,
+        cat_id: str,
+        auto_rules: dict,
+        global_rules: dict,
 ) -> bytes:
     """
-    ZIP 직접 조작 방식으로 sharedString 포맷 유지하며 데이터 삽입
-    Excel 열었을 때 값이 사라지는 inlineStr 문제 완전 해결
+    템플릿 로드 후 데이터 삽입 (구글 드라이브 우선, 로컬 fallback)
     """
     # ── 1. 원본 바이트 읽기 ──
-    with open(template_path, "rb") as f:
-        raw = f.read()
+    if isinstance(template_src, (bytes, bytearray)):
+        raw = bytes(template_src)
+    elif isinstance(template_src, str):
+        # 파일명으로 전달된 경우
+        # 1) 구글 드라이브에서 시도
+        try:
+            gdrive = get_gdrive_manager()
+            raw = gdrive.download_template(template_src)
+            if not raw:
+                raise FileNotFoundError(f"구글 드라이브에 없음: {template_src}")
+        except Exception as e:
+            # 2) 로컬 폴더에서 시도 (fallback)
+            local_path = TEMPLATES_DIR / template_src
+            if not local_path.exists():
+                raise FileNotFoundError(f"템플릿을 찾을 수 없습니다 (구글 드라이브/로컬 모두): {template_src}")
+            raw = local_path.read_bytes()
+            # Streamlit 환경에서만 경고 표시
+            try:
+                import streamlit as st
+                st.warning(f"로컬 템플릿 사용 중: {template_src}")
+            except ImportError:
+                print(f"⚠️ 로컬 템플릿 사용 중: {template_src}")
+    else:
+        raise TypeError(f"지원하지 않는 template_src 타입: {type(template_src)}")
 
     # ── 2. ZIP 파싱 + 전체 시트 XML 정리 ──
     # activePane="bottom_left" 는 OOXML 스펙 위반 → "bottomLeft" 로 수정
-    # (원본 Shopee 템플릿 버그 - 이것이 Excel 복구 오류 sheet2/4/5 원인)
     with zipfile.ZipFile(io.BytesIO(raw)) as zf:
         names = zf.namelist()
         file_map = {}
@@ -303,7 +315,7 @@ def build_file(
             data = zf.read(n)
             if n.startswith("xl/worksheets/") and n.endswith(".xml"):
                 text = data.decode("utf-8")
-                # activePane 값 수정 (bottom_left → bottomLeft 등)
+                # activePane 값 수정
                 text = text.replace('activePane="bottom_left"', 'activePane="bottomLeft"')
                 text = text.replace('activePane="top_left"', 'activePane="topLeft"')
                 text = text.replace('activePane="bottom_right"', 'activePane="bottomRight"')
@@ -311,11 +323,10 @@ def build_file(
                 data = text.encode("utf-8")
             file_map[n] = data
 
-    ss_xml    = file_map["xl/sharedStrings.xml"].decode("utf-8")
+    ss_xml = file_map["xl/sharedStrings.xml"].decode("utf-8")
     sheet2_xml = file_map["xl/worksheets/sheet2.xml"].decode("utf-8")
 
-    # sheet2.xml 에만 추가 수정: sheetProtection + extLst 제거
-    # sheetProtection 은 self-closing 또는 non-self-closing 모두 처리
+    # sheet2.xml 추가 수정: sheetProtection + extLst 제거
     sheet2_xml = re.sub(r"<sheetProtection\b[^>]*/>", "", sheet2_xml)
     sheet2_xml = re.sub(r"<sheetProtection\b[^>]*>.*?</sheetProtection>", "", sheet2_xml, flags=re.DOTALL)
     sheet2_xml = re.sub(r"<extLst>.*?</extLst>", "", sheet2_xml, flags=re.DOTALL)
@@ -331,7 +342,7 @@ def build_file(
 
     # ── 6. cat_id 상태맵 ──
     status_map = _get_status_map_from_hidden(hidden_xml, shared, cat_id)
-    cat_info   = auto_rules.get(cat_id, {})
+    cat_info = auto_rules.get(cat_id, {})
 
     DATA_START_ROW = 7
 
@@ -381,12 +392,6 @@ def build_file(
         sorted_cols = sorted(cell_data.keys(), key=lambda c: _col_index(c))
         for col_letter in sorted_cols:
             value = cell_data[col_letter]
-            # 숫자 키 여부로 스타일 결정 (스타일 0 기본)
-            internal_key = None
-            for k, v in key_to_col.items():
-                if v == col_letter:
-                    internal_key = k
-                    break
             cell_xml = _make_cell_xml(col_letter, write_row, value, shared, style="0")
             cells_xml.append(cell_xml)
 
@@ -394,7 +399,6 @@ def build_file(
             new_rows_xml.append(_build_row_xml(write_row, cells_xml))
 
     # ── 8. sheet2.xml에 행 삽입 ──
-    # </sheetData> 바로 앞에 새 행 삽입
     rows_str = "".join(new_rows_xml)
     new_sheet2 = sheet2_xml.replace("</sheetData>", rows_str + "</sheetData>", 1)
 
@@ -417,9 +421,9 @@ def build_file(
 
 
 def build_all_files(
-    groups: dict,
-    auto_rules: dict,
-    global_rules: dict,
+        groups: dict,
+        auto_rules: dict,
+        global_rules: dict,
 ) -> tuple:
     """
     카테고리별 그룹 전체 처리 → { filename: bytes }, skipped_list 반환
@@ -438,19 +442,20 @@ def build_all_files(
             continue
 
         template_file = cat_info.get("template_file")
-        template_path = TEMPLATES_DIR / template_file
-        if not template_path.exists():
-            skipped.append(f"카테고리 {cat_id} ({template_file} 파일 없음)")
+        if not template_file:
+            skipped.append(f"카테고리 {cat_id} (파일명 없음)")
             continue
 
         try:
+            # 파일명으로 구글 드라이브 또는 로컬에서 자동 다운로드
             file_bytes = build_file(
-                str(template_path),
+                template_file,  # ← 파일명 전달
                 group_df,
                 cat_id,
                 auto_rules,
                 global_rules,
             )
+
             safe_name = (
                 cat_info.get("category_path", cat_id)
                 .replace("/", "_")
@@ -458,6 +463,7 @@ def build_all_files(
             )
             filename = f"shopee_{safe_name}_{cat_id}.xlsx"
             results[filename] = file_bytes
+
         except Exception as e:
             skipped.append(f"카테고리 {cat_id} 처리 오류: {e}")
 

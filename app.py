@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from sheet_reader import read_google_sheet, validate_dataframe, group_by_category, parse_category
 from file_builder import build_all_files
 from template_analyzer import load_auto_rules, load_global_rules
+from gdrive_manager import get_gdrive_manager
 
 st.set_page_config(
     page_title="쇼피 대량등록 도우미",
@@ -22,9 +23,33 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── 사이드바 ──
+# ══════════════════════════════════════════════════════════════
+# 사이드바
+# ══════════════════════════════════════════════════════════════
 with st.sidebar:
     st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/f/fe/Shopee.svg/200px-Shopee.svg.png", width=120)
+
+    # 구글 드라이브 연결 상태 표시
+    try:
+        gdrive = get_gdrive_manager()
+        st.success("✅ 구글 드라이브 연결됨 (OAuth 2.0)")
+        st.markdown(f"📁 [공유 폴더 열기]({gdrive.get_folder_link()})")
+    except Exception as e:
+        st.warning("⚠️ 구글 드라이브 연결 실패")
+        st.caption("로컬 모드로 실행 중")
+        with st.expander("연결 실패 상세 정보"):
+            st.error(str(e))
+            st.markdown("""
+            **OAuth 2.0 인증 해결 방법:**
+            1. `credentials.json` 파일이 프로젝트 루트에 있는지 확인
+            2. Google Cloud Console에서 Drive API 활성화 확인
+            3. OAuth 동의 화면에서 테스트 사용자 등록 확인
+            4. 최초 실행 시 브라우저에서 구글 계정 인증 필요
+            5. 토큰 만료 시: `rm token.json` 후 재실행
+            """)
+
+    st.divider()
+
     st.markdown("### 사용 방법")
     st.markdown("""
     1. 구글 시트 링크 붙여넣기
@@ -46,14 +71,16 @@ with st.sidebar:
     st.caption(f"등록된 카테고리: **{len(auto_rules)}개**")
     st.caption(f"설정된 고정값: **{len(global_rules)}개**")
 
-# ── 메인 ──
+# ══════════════════════════════════════════════════════════════
+# 메인 페이지
+# ══════════════════════════════════════════════════════════════
 st.title("🛍️ 쇼피 대량등록 파일 생성")
 st.markdown("구글 시트의 **Collection 탭** 데이터를 쇼피 업로드 템플릿으로 변환합니다.")
 st.divider()
 
-# ════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
 # Step 1: 구글 시트 URL 입력
-# ════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
 st.subheader("① 구글 시트 링크 입력")
 
 st.info(
@@ -82,9 +109,9 @@ if load_btn and sheet_url:
         except ValueError as e:
             st.error(str(e))
 
-# ════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
 # Step 2: 데이터 확인
-# ════════════════════════════════════════
+# ════════════════════════════════════════════════════════════
 if "df" in st.session_state:
     df = st.session_state["df"]
 
@@ -128,9 +155,9 @@ if "df" in st.session_state:
             hide_index=True, use_container_width=True
         )
 
-    # ════════════════════════════════════════
+    # ════════════════════════════════════════════════════════════
     # Step 3: 파일 생성
-    # ════════════════════════════════════════
+    # ════════════════════════════════════════════════════════════
     st.divider()
     st.subheader("③ 파일 생성 및 다운로드")
 

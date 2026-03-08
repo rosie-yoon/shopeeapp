@@ -10,6 +10,7 @@ import zipfile
 import openpyxl
 from openpyxl.utils import get_column_letter
 from pathlib import Path
+from gdrive_manager import get_gdrive_manager
 
 CONFIG_DIR = Path(__file__).parent / "config"
 CONFIG_DIR.mkdir(exist_ok=True)
@@ -275,13 +276,65 @@ def save_auto_rules(new_rules: dict, template_code: str, mid_category: str):
 
 
 def load_auto_rules() -> dict:
+    """auto_rules 로드 (구글 드라이브 우선, 로컬 fallback)"""
+    try:
+        gdrive = get_gdrive_manager()
+        rules = gdrive.load_config_json("auto_rules.json")
+        if rules:
+            return rules
+    except Exception as e:
+        st.warning(f"구글 드라이브에서 auto_rules 로드 실패, 로컬 사용: {e}")
+
+    # fallback: 로컬 파일
     if AUTO_RULES_PATH.exists():
         with open(AUTO_RULES_PATH, "r", encoding="utf-8") as f:
             return json.load(f)
     return {}
 
 
+def save_auto_rules(new_rules: dict, template_code: str, mid_category: str):
+    """auto_rules 저장 (구글 드라이브 + 로컬 백업)"""
+    # 기존 규칙 로드
+    existing = load_auto_rules()
+
+    # 동일 template_code의 기존 항목 제거
+    existing = {
+        cat_id: info
+        for cat_id, info in existing.items()
+        if info.get("template_code") != template_code
+    }
+
+    # 새 규칙 추가
+    existing.update(new_rules)
+
+    # 1) 구글 드라이브에 저장
+    try:
+        gdrive = get_gdrive_manager()
+        gdrive.save_config_json("auto_rules.json", existing)
+    except Exception as e:
+        st.warning(f"구글 드라이브 저장 실패: {e}")
+
+    # 2) 로컬 백업 (fallback)
+    try:
+        with open(AUTO_RULES_PATH, "w", encoding="utf-8") as f:
+            json.dump(existing, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass  # 로컬 백업 실패는 무시
+
+    return existing
+
+
 def load_global_rules() -> dict:
+    """global_rules 로드 (구글 드라이브 우선, 로컬 fallback)"""
+    try:
+        gdrive = get_gdrive_manager()
+        rules = gdrive.load_config_json("global_rules.json")
+        if rules:
+            return rules
+    except Exception as e:
+        st.warning(f"구글 드라이브에서 global_rules 로드 실패, 로컬 사용: {e}")
+
+    # fallback: 로컬 파일
     if GLOBAL_RULES_PATH.exists():
         with open(GLOBAL_RULES_PATH, "r", encoding="utf-8") as f:
             return json.load(f)
@@ -289,8 +342,20 @@ def load_global_rules() -> dict:
 
 
 def save_global_rules(rules: dict):
-    with open(GLOBAL_RULES_PATH, "w", encoding="utf-8") as f:
-        json.dump(rules, f, ensure_ascii=False, indent=2)
+    """global_rules 저장 (구글 드라이브 + 로컬 백업)"""
+    # 1) 구글 드라이브에 저장
+    try:
+        gdrive = get_gdrive_manager()
+        gdrive.save_config_json("global_rules.json", rules)
+    except Exception as e:
+        st.warning(f"구글 드라이브 저장 실패: {e}")
+
+    # 2) 로컬 백업 (fallback)
+    try:
+        with open(GLOBAL_RULES_PATH, "w", encoding="utf-8") as f:
+            json.dump(rules, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass  # 로컬 백업 실패는 무시
 
 
 def get_categories_by_mid(auto_rules: dict) -> dict:
