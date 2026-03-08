@@ -50,8 +50,6 @@ def manage_profiles_dialog():
         with col1:
             new_name = st.text_input(
                 "프로필 이름",
-                placeholder="예: 김영진 - 뷰티 상품",
-                help="팀원들이 알아보기 쉬운 한글 이름을 입력하세요"
             )
         with col2:
             new_url = st.text_input(
