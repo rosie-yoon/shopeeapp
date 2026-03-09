@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from template_analyzer import load_auto_rules, load_global_rules, save_global_rules
 
-st.set_page_config(page_title="⚙️ 필수값 관리", page_icon="⚙️", layout="wide")
+st.set_page_config(page_title="⚙필수값 관리", page_icon="⚙️", layout="wide")
 
 st.title("⚙️ 필수값 관리")
 st.caption("템플릿에 항상 고정으로 들어가야 하는 값들을 관리합니다.")
