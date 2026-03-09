@@ -34,6 +34,70 @@ class GDriveManager:
         self._ensure_folder_structure()
 
     def _authenticate(self):
+        """OAuth 2.0 사용자 인증 (로컬/클라우드 환경 모두 지원)"""
+        creds = None
+        token_path = Path("token.json")
+        credentials_path = Path("credentials.json")
+
+        # 1단계: 기존 토큰 로드 시도
+        if token_path.exists():
+            try:
+                creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
+            except Exception as e:
+                print(f"토큰 파일 로드 실패: {e}")
+
+        # 2단계: Streamlit Secrets에서 토큰 로드 시도 (클라우드 환경용)
+        if not creds:
+            try:
+                import streamlit as st
+                if "gdrive_token" in st.secrets:
+                    token_info = dict(st.secrets["gdrive_token"])
+                    creds = Credentials.from_authorized_user_info(token_info, SCOPES)
+            except (ImportError, Exception):
+                pass  # Streamlit 없거나 secrets 없으면 패스
+
+        # 3단계: 토큰이 없거나 만료된 경우 처리
+        if not creds or not creds.valid:
+            if creds and creds.expired and creds.refresh_token:
+                try:
+                    # 토큰 갱신 시도
+                    creds.refresh(Request())
+                except Exception as e:
+                    print(f"토큰 갱신 실패: {e}")
+                    creds = None
+
+            # 새로운 인증이 필요한 경우
+            if not creds:
+                if not credentials_path.exists():
+                    raise FileNotFoundError(
+                        "credentials.json 파일이 없습니다. "
+                        "Google Cloud Console에서 OAuth 2.0 클라이언트 ID를 생성하고 다운로드하세요."
+                    )
+
+                # 로컬 환경에서만 브라우저 인증 실행
+                if os.getenv("STREAMLIT_SERVER_PORT") is None:
+                    flow = InstalledAppFlow.from_client_secrets_file(
+                        str(credentials_path), SCOPES
+                    )
+                    creds = flow.run_local_server(port=0)
+
+                    # 새 토큰 저장
+                    try:
+                        with open(token_path, 'w') as token:
+                            token.write(creds.to_json())
+                    except Exception as e:
+                        print(f"토큰 저장 실패: {e}")
+                else:
+                    raise Exception(
+                        "Streamlit Cloud 환경에서는 미리 생성된 토큰이 필요합니다. "
+                        "로컬에서 token.json을 생성한 후 Streamlit Secrets에 업로드하세요."
+                    )
+
+        # 4단계: Drive API 서비스 빌드
+        try:
+            self.service = build('drive', 'v3', credentials=creds)
+        except Exception as e:
+            raise Exception(f"Google Drive 서비스 초기화 실패: {e}")
 
     def _ensure_folder_structure(self):
         """필요한 폴더 구조 자동 생성"""
