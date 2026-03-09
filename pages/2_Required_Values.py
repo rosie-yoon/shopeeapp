@@ -7,23 +7,59 @@ import streamlit as st
 import json
 from pathlib import Path
 import sys
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from template_analyzer import load_auto_rules, load_global_rules, save_global_rules
+# ① 안전한 모듈 Import (예외 처리 추가)
+try:
+    from template_analyzer import load_auto_rules, load_global_rules, save_global_rules
+    from gdrive_manager import get_gdrive_manager
+except ImportError as e:
+    st.error(f"❌ 모듈 import 오류: {e}")
+    st.info("앱을 재시작하거나 관리자에게 문의하세요.")
+    st.stop()
+except Exception as e:
+    st.error(f"❌ 초기화 오류: {e}")
+    st.info("구글 드라이브 인증 설정을 확인해주세요.")
+    st.stop()
 
 st.set_page_config(page_title="⚙필수값 관리", page_icon="⚙️", layout="wide")
 
 st.title("⚙️ 필수값 관리")
 st.caption("템플릿에 항상 고정으로 들어가야 하는 값들을 관리합니다.")
 
-st.info("""
+# ② 구글 드라이브 연결 상태 확인
+USE_GDRIVE = False
+try:
+    gdrive = get_gdrive_manager()
+    st.success("✅ 구글 드라이브 연결됨 (OAuth 2.0)")
+    st.markdown(f"📁 [공유 폴더 열기]({gdrive.get_folder_link()})")
+    USE_GDRIVE = True
+except Exception as e:
+    st.warning("⚠️ 구글 드라이브 연결 실패. 로컬 모드로 동작합니다.")
+    with st.expander("연결 실패 상세"):
+        st.error(str(e))
+
+st.divider()
+
+# ③ 저장 위치 정보 포함한 안내
+st.info(f"""
 **두 가지 유형의 값을 관리합니다:**
 - 🔵 **항상 입력** (`exists`): 해당 컬럼이 템플릿에 존재하면 무조건 입력 (예: FDA번호)
 - 🟡 **필수일 때만** (`mandatory`): 소카테고리에서 MANDATORY로 지정된 경우만 입력 (예: 주관식 항목)
+
+**저장 위치:** {'🌐 구글 드라이브 (팀 전체 공유)' if USE_GDRIVE else '💻 로컬 (config/)'}
 """)
 
-auto_rules = load_auto_rules()
-global_rules = load_global_rules()
+# ④ 안전한 데이터 로드 (예외 처리 추가)
+try:
+    auto_rules = load_auto_rules()
+    global_rules = load_global_rules()
+except Exception as e:
+    st.error(f"❌ 데이터 로드 실패: {e}")
+    st.info("구글 드라이브 연결 상태를 확인하거나 로컬 모드로 사용하세요.")
+    auto_rules = {}
+    global_rules = {}
 
 # ── 현재 저장된 global_rules 표시 및 편집 ──
 st.subheader("📝 저장된 고정값 목록")
@@ -73,13 +109,20 @@ else:
                         "apply_when": new_apply,
                     }
 
-    # 저장 버튼
+    # ⑤ 저장 버튼 (저장 위치별 차별화된 피드백)
     if st.button("💾 변경사항 저장", type="primary"):
         for k in rules_to_delete:
             updated_rules.pop(k, None)
-        save_global_rules(updated_rules)
-        st.success("✅ 저장되었습니다!")
-        st.rerun()
+
+        try:
+            save_global_rules(updated_rules)
+            if USE_GDRIVE:
+                st.success("✅ 구글 드라이브에 저장완료! 모든 팀원에게 즉시 반영됩니다.")
+            else:
+                st.success("✅ 로컬에 저장완료!")
+            st.rerun()
+        except Exception as e:
+            st.error(f"❌ 저장 중 오류 발생: {e}")
 
 st.divider()
 
@@ -99,8 +142,15 @@ for cat_id, info in auto_rules.items():
 with st.expander("🔍 알려진 속성에서 선택"):
     if all_attrs:
         search = st.text_input("속성명 검색", placeholder="예: FDA, Ingredient, Skin Type...")
-        filtered = {k: v for k, v in all_attrs.items()
-                    if search.lower() in v.lower() or search.lower() in k.lower()} if search else all_attrs
+        filtered = (
+            {
+                k: v
+                for k, v in all_attrs.items()
+                if search.lower() in v.lower() or search.lower() in k.lower()
+            }
+            if search
+            else all_attrs
+        )
 
         if filtered:
             selected_key = st.selectbox(
@@ -111,13 +161,19 @@ with st.expander("🔍 알려진 속성에서 선택"):
 
             col1, col2, col3 = st.columns([3, 2, 1])
             with col1:
-                new_value = st.text_input("입력할 고정값", key="new_attr_value",
-                                          placeholder="예: FDA-2024-XXXXX")
+                new_value = st.text_input(
+                    "입력할 고정값",
+                    key="new_attr_value",
+                    placeholder="예: FDA-2024-XXXXX",
+                )
             with col2:
                 apply_options = {"exists": "🔵 항상 입력", "mandatory": "🟡 필수일 때만"}
-                new_apply = st.selectbox("적용 조건", options=list(apply_options.keys()),
-                                         format_func=lambda x: apply_options[x],
-                                         key="new_attr_apply")
+                new_apply = st.selectbox(
+                    "적용 조건",
+                    options=list(apply_options.keys()),
+                    format_func=lambda x: apply_options[x],
+                    key="new_attr_apply",
+                )
             with col3:
                 st.markdown("<br>", unsafe_allow_html=True)
                 if st.button("추가", key="add_from_search"):
@@ -127,9 +183,19 @@ with st.expander("🔍 알려진 속성에서 선택"):
                             "value": new_value,
                             "apply_when": new_apply,
                         }
-                        save_global_rules(global_rules)
-                        st.success(f"✅ '{filtered[selected_key]}' 추가 완료!")
-                        st.rerun()
+                        try:
+                            save_global_rules(global_rules)
+                            if USE_GDRIVE:
+                                st.success(
+                                    f"✅ '{filtered[selected_key]}' 구글 드라이브에 추가 완료!"
+                                )
+                            else:
+                                st.success(
+                                    f"✅ '{filtered[selected_key]}' 로컬에 추가 완료!"
+                                )
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ 저장 중 오류 발생: {e}")
                     else:
                         st.error("값을 입력해주세요.")
     else:
@@ -140,7 +206,9 @@ with st.expander("✏️ 직접 입력"):
     with col1:
         direct_display = st.text_input("속성 표시명", placeholder="예: FDA Registration No.")
     with col2:
-        direct_key = st.text_input("내부 key", placeholder="예: ps_product_global_attribute.100963")
+        direct_key = st.text_input(
+            "내부 key", placeholder="예: ps_product_global_attribute.100963"
+        )
     with col3:
         direct_value = st.text_input("고정값", placeholder="예: FDA-2024-XXXXX")
     with col4:
@@ -159,8 +227,14 @@ with st.expander("✏️ 직접 입력"):
                 "value": direct_value,
                 "apply_when": direct_apply,
             }
-            save_global_rules(global_rules)
-            st.success(f"✅ '{direct_display}' 추가 완료!")
-            st.rerun()
+            try:
+                save_global_rules(global_rules)
+                if USE_GDRIVE:
+                    st.success(f"✅ '{direct_display}' 구글 드라이브에 추가 완료!")
+                else:
+                    st.success(f"✅ '{direct_display}' 로컬에 추가 완료!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ 저장 중 오류 발생: {e}")
         else:
             st.error("모든 항목을 입력해주세요.")
