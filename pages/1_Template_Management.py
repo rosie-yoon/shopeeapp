@@ -11,13 +11,23 @@ from collections import defaultdict
 # 부모 디렉토리를 import 경로에 추가
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from template_analyzer import (
-    analyze_template,
-    save_auto_rules,
-    load_auto_rules,
-    extract_template_info
-)
-from gdrive_manager import get_gdrive_manager
+# 안전한 import with 예외 처리
+try:
+    from template_analyzer import (
+        analyze_template,
+        save_auto_rules,
+        load_auto_rules,
+        extract_template_info
+    )
+    from gdrive_manager import get_gdrive_manager
+except ImportError as e:
+    st.error(f"❌ 모듈 import 오류: {e}")
+    st.info("앱을 재시작하거나 관리자에게 문의하세요.")
+    st.stop()
+except Exception as e:
+    st.error(f"❌ 초기화 오류: {e}")
+    st.info("구글 드라이브 인증 설정을 확인해주세요.")
+    st.stop()
 
 # ════════════════════════════════════════════════════════════
 # 페이지 기본 설정 및 세션 상태 초기화
