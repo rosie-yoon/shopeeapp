@@ -1,8 +1,10 @@
-streamlit==1.32.2
-openpyxl==3.1.2
-pandas==2.0.3
-Pillow==10.0.1
-google-auth==2.27.0
-google-auth-oauthlib==1.2.0
+streamlit==1.39.0
+openpyxl==3.1.5
+pandas==2.2.3
+Pillow==11.0.0
+google-auth==2.35.0
+google-auth-oauthlib==1.2.1
 google-auth-httplib2==0.2.0
-google-api-python-client==2.111.0
+google-api-python-client==2.150.0
+setuptools>=70.0.0
+wheel>=0.42.0
