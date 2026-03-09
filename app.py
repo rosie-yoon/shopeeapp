@@ -103,7 +103,7 @@ def manage_profiles_dialog():
             {"프로필 이름": name, "구글 시트 URL": url[:50] + "..." if len(url) > 50 else url}
             for name, url in profiles.items()
         ])
-        st.dataframe(df_profiles, use_container_width=True, hide_index=True)
+        st.dataframe(df, hide_index=True, width="stretch")
 
         # 프로필 삭제 기능
         col1, col2 = st.columns([3, 1])
