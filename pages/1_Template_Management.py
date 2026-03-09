@@ -425,7 +425,7 @@ else:
                     st.write(status_emoji)  # 순수 텍스트 이모지만
 
                 with c2:
-                    st.code(template_code, language=None)
+                    st.markdown(template_code)
 
                 with c3:
                     st.write(category_path)
