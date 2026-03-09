@@ -358,111 +358,82 @@ else:
     for top in sorted_top_keys:
         mid_map = tree[top]
 
-        # 검색 필터링: 해당 대카테고리에 매칭되는 템플릿이 있는지 확인
-        top_has_match = False
+        # 대카테고리 전체 템플릿 수집 (중카테고리 구분 없이 Flatten)
+        all_templates = []
         for mid, t_list in mid_map.items():
             for t_file, meta in t_list:
                 if template_matches_search(t_file, meta, search_query):
-                    top_has_match = True
-                    break
-            if top_has_match:
-                break
+                    all_templates.append((t_file, meta))
 
-        if not top_has_match:
+        if not all_templates:
             continue
+
+        # 정렬 적용
+        if sort_option == "이름순":
+            all_templates.sort(key=lambda x: x[0].lower())
+        elif sort_option == "상태순":
+            all_templates.sort(key=lambda x: x[1].get("status_priority", 5))
+        elif sort_option == "카테고리순":
+            all_templates.sort(key=lambda x: (x[1].get("mid", ""), x[0].lower()))
 
         # 대카테고리 아이콘
         icon = CATEGORY_ICONS.get(top, "📦")
-        total_in_top = sum(len(v) for v in mid_map.values())
 
         with st.expander(
-            f"{icon} **{top}** ({total_in_top}개 템플릿)",
-            expanded=st.session_state.expand_all_templates
+                f"{icon} **{top}** ({len(all_templates)}개 템플릿)",
+                expanded=st.session_state.expand_all_templates
         ):
-            # 중카테고리별 표시
-            # 중카테고리별 표시
-            for mid in sorted(mid_map.keys()):
-                t_list = mid_map[mid]
+            # ─────────────────────────────────────
+            # 테이블 헤더 (대카테고리당 1번만)
+            # ─────────────────────────────────────
+            col_ratios = [0.6, 1.2, 3.0, 4.2]  # 상태, 코드, 카테고리, 파일명
+            h1, h2, h3, h4 = st.columns(col_ratios)
 
-                # 중카테고리 레벨에서 검색 필터링
-                filtered_templates = [
-                    (t_file, meta) for t_file, meta in t_list
-                    if template_matches_search(t_file, meta, search_query)
-                ]
+            with h1:
+                st.markdown("**상태**")
+            with h2:
+                st.markdown("**템플릿 코드**")
+            with h3:
+                st.markdown("**카테고리**")
+            with h4:
+                st.markdown("**파일명**")
 
-                if not filtered_templates:
-                    continue
+            st.markdown("---")  # 헤더 구분선
 
-                st.markdown(f"#### 📁 {mid} ({len(filtered_templates)}개)")
+            # ─────────────────────────────────────
+            # 템플릿 데이터 행들 (중카테고리 구분 없이)
+            # ─────────────────────────────────────
+            for t_file, meta in all_templates:
+                template_code = meta.get("template_code", "") or "미확인"
+                status = meta.get("status", "❓ 알 수 없음")
+                top_cat = meta.get("top", "Unknown")
+                mid_cat = meta.get("mid", "Unknown")
+                category_path = f"{top_cat} > {mid_cat}"
 
-                # 정렬 적용
-                if sort_option == "이름순":
-                    filtered_templates.sort(key=lambda x: x[0].lower())
-                elif sort_option == "상태순":
-                    filtered_templates.sort(key=lambda x: x[1].get("status_priority", 5))
-                elif sort_option == "카테고리순":
-                    filtered_templates.sort(key=lambda x: (x[1].get("top", ""), x[1].get("mid", ""), x[0].lower()))
+                # 상태 이모지만 추출 (박스 없이)
+                if status.startswith("✅"):
+                    status_emoji = "✅"
+                elif status.startswith("⚠️"):
+                    status_emoji = "⚠️"
+                else:
+                    status_emoji = "❌"
 
-                # ─────────────────────────────────────
-                # 테이블형 리스트 UI
-                # ─────────────────────────────────────
-                col_ratios = [1.0, 1.5, 3.0, 4.0]  # 상태, 코드, 카테고리, 파일명
-                h1, h2, h3, h4 = st.columns(col_ratios)
+                # 데이터 행 출력
+                c1, c2, c3, c4 = st.columns(col_ratios)
 
-                with h1:
-                    st.markdown("**상태**")
-                with h2:
-                    st.markdown("**템플릿 코드**")
-                with h3:
-                    st.markdown("**카테고리**")
-                with h4:
-                    st.markdown("**파일명**")
+                with c1:
+                    st.write(status_emoji)  # 순수 텍스트 이모지만
 
-                st.markdown("---")  # 헤더 구분선
+                with c2:
+                    st.code(template_code, language=None)
 
-                # 템플릿 데이터 행들
-                for t_file, meta in filtered_templates:
-                    template_code = meta.get("template_code", "") or "미확인"
-                    status = meta.get("status", "❓ 알 수 없음")
-                    top_cat = meta.get("top", "Unknown")
-                    mid_cat = meta.get("mid", "Unknown")
-                    category_path = f"{top_cat} > {mid_cat}"
+                with c3:
+                    st.write(category_path)
 
-                    # 상태별 색상 및 아이콘
-                    if status.startswith("✅"):
-                        status_display = "✅"
-                        status_color = "normal"
-                    elif status.startswith("⚠️"):
-                        status_display = "⚠️"
-                        status_color = "warning"
-                    else:
-                        status_display = "❌"
-                        status_color = "error"
+                with c4:
+                    st.markdown(f"**{t_file}**")
 
-                    # 데이터 행 출력
-                    c1, c2, c3, c4 = st.columns(col_ratios)
-
-                    with c1:
-                        if status_color == "normal":
-                            st.success(status_display, icon="✅")
-                        elif status_color == "warning":
-                            st.warning(status_display, icon="⚠️")
-                        else:
-                            st.error(status_display, icon="❌")
-
-                    with c2:
-                        st.code(template_code, language=None)
-
-                    with c3:
-                        st.markdown(category_path)
-
-                    with c4:
-                        st.markdown(f"**{t_file}**")
-
-                    match_count += 1
-
-                # 중카테고리 간 간격
-                st.markdown("")
+                match_count += 1
 
     # 검색 결과 요약
     if search_query:
