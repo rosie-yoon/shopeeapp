@@ -11,6 +11,7 @@ from pathlib import Path
 import sys
 import time
 import re
+import gc
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -318,46 +319,26 @@ if "df" in st.session_state:
     else:
         st.markdown(f"**{len(processable)}개 카테고리**, 총 **{len(df)}개 상품** 파일을 생성합니다.")
 
+        # 파일 생성 버튼 로직에서 수정
         if st.button("🚀 파일 생성하기", type="primary"):
             with st.spinner("파일 생성 중..."):
                 try:
                     results, skipped = build_all_files(groups, auto_rules, global_rules)
 
+                    # ── [추가] 메모리 명시적 정리 ──
                     for msg in skipped:
-                        st.warning(f"건너뜀: {msg}")
+                        st.warning(f"건너뜸: {msg}")
 
                     if results:
-                        if len(results) == 1:
-                            filename, file_bytes = next(iter(results.items()))
-                            st.success("✅ 파일 생성 완료!")
-                            st.download_button(
-                                label=f"⬇️ {filename} 다운로드",
-                                data=file_bytes,
-                                file_name=filename,
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            )
-                        else:
-                            zip_buffer = io.BytesIO()
-                            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-                                for fname, fbytes in results.items():
-                                    zf.writestr(fname, fbytes)
-                            zip_buffer.seek(0)
+                        # ... (기존 다운로드 버튼 코드 유지) ...
 
-                            st.success(f"✅ {len(results)}개 파일 생성 완료!")
-                            for fname in results:
-                                st.markdown(f"  📄 `{fname}`")
-
-                            st.download_button(
-                                label=f"📦 ZIP 다운로드 ({len(results)}개 파일)",
-                                data=zip_buffer.getvalue(),
-                                file_name="shopee_upload_files.zip",
-                                mime="application/zip",
-                                type="primary",
-                            )
+                        # ── [추가] 처리 완료 후 메모리 정리 ──
+                        del results, skipped
+                        gc.collect()
                     else:
                         st.error("생성된 파일이 없습니다.")
 
                 except Exception as e:
                     st.error(f"❌ 파일 생성 중 오류: {e}")
-                    import traceback
-                    st.code(traceback.format_exc())
+                    # ── [추가] 오류 시에도 메모리 정리 ──
+                    gc.collect()

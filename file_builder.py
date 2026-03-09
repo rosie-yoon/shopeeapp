@@ -417,7 +417,14 @@ def build_file(
                 zf_out.writestr(name, file_map[name])
 
     out_buf.seek(0)
-    return out_buf.getvalue()
+    result = out_buf.getvalue()
+
+    # ── [추가] 명시적 메모리 정리 ──
+    import gc
+    del file_map, shared, new_ss_xml, new_sheet2
+    gc.collect()
+
+    return result
 
 
 def build_all_files(
