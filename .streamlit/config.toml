@@ -1,6 +1,16 @@
 [server]
 headless = true
 enableCORS = false
+maxUploadSize = 50
+maxMessageSize = 50
 
 [browser]
 gatherUsageStats = false
+
+[runner]
+fastReruns = true
+magicEnabled = false
+
+[client]
+showErrorDetails = true
+toolbarMode = "minimal"
