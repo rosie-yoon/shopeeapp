@@ -380,6 +380,7 @@ else:
             expanded=st.session_state.expand_all_templates
         ):
             # 중카테고리별 표시
+            # 중카테고리별 표시
             for mid in sorted(mid_map.keys()):
                 t_list = mid_map[mid]
 
@@ -402,35 +403,66 @@ else:
                 elif sort_option == "카테고리순":
                     filtered_templates.sort(key=lambda x: (x[1].get("top", ""), x[1].get("mid", ""), x[0].lower()))
 
-                # 템플릿 카드 2열 레이아웃
-                cols = st.columns(2)
-                for idx, (t_file, meta) in enumerate(filtered_templates):
-                    col = cols[idx % 2]
-                    with col:
-                        cat_count = len(meta["cat_ids"])
-                        template_code = meta.get("template_code", "")
-                        status = meta.get("status", "❓ 알 수 없음")
+                # ─────────────────────────────────────
+                # 테이블형 리스트 UI
+                # ─────────────────────────────────────
+                col_ratios = [1.0, 1.5, 3.0, 4.0]  # 상태, 코드, 카테고리, 파일명
+                h1, h2, h3, h4 = st.columns(col_ratios)
 
-                        # 샘플 경로 (가장 짧은 것 선택)
-                        sample_paths = meta.get("sample_paths", set())
-                        sample_path = min(sample_paths, key=len) if sample_paths else ""
+                with h1:
+                    st.markdown("**상태**")
+                with h2:
+                    st.markdown("**템플릿 코드**")
+                with h3:
+                    st.markdown("**카테고리**")
+                with h4:
+                    st.markdown("**파일명**")
 
-                        with st.container(border=True):
-                            st.markdown(f"**{t_file}**")
-                            st.caption(f"🔑 코드: `{template_code or '미확인'}`")
-                            st.caption(f"📊 소카테고리 규칙: **{cat_count}개**")
-                            if sample_path:
-                                st.caption(f"🏷️ 예시: {sample_path}")
+                st.markdown("---")  # 헤더 구분선
 
-                            # 상태 배지
-                            if status.startswith("✅"):
-                                st.success(status)
-                            elif status.startswith("⚠️"):
-                                st.warning(status)
-                            else:
-                                st.error(status)
+                # 템플릿 데이터 행들
+                for t_file, meta in filtered_templates:
+                    template_code = meta.get("template_code", "") or "미확인"
+                    status = meta.get("status", "❓ 알 수 없음")
+                    top_cat = meta.get("top", "Unknown")
+                    mid_cat = meta.get("mid", "Unknown")
+                    category_path = f"{top_cat} > {mid_cat}"
 
-                        match_count += 1
+                    # 상태별 색상 및 아이콘
+                    if status.startswith("✅"):
+                        status_display = "✅"
+                        status_color = "normal"
+                    elif status.startswith("⚠️"):
+                        status_display = "⚠️"
+                        status_color = "warning"
+                    else:
+                        status_display = "❌"
+                        status_color = "error"
+
+                    # 데이터 행 출력
+                    c1, c2, c3, c4 = st.columns(col_ratios)
+
+                    with c1:
+                        if status_color == "normal":
+                            st.success(status_display, icon="✅")
+                        elif status_color == "warning":
+                            st.warning(status_display, icon="⚠️")
+                        else:
+                            st.error(status_display, icon="❌")
+
+                    with c2:
+                        st.code(template_code, language=None)
+
+                    with c3:
+                        st.markdown(category_path)
+
+                    with c4:
+                        st.markdown(f"**{t_file}**")
+
+                    match_count += 1
+
+                # 중카테고리 간 간격
+                st.markdown("")
 
     # 검색 결과 요약
     if search_query:
